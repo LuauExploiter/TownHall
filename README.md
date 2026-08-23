@@ -1,6 +1,6 @@
 # TownHall
 
-1:1 copy of the TownHall aura from The Strongest Battlegrounds, animations included. Works in every Roblox game.
+1:1 copy of the TownHall aura from The Strongest Battlegrounds which also works universally.
 
 ## Usage
 
