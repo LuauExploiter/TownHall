@@ -1,5 +1,5 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local BaseUrl = "https://raw.githubusercontent.com/LuauExploiter/TownHall/main/"
@@ -30,9 +30,9 @@ end
 shared.NerfVfx = shared.NerfVfx or function() end
 shared.repfire = shared.repfire or function() end
 
-pcall(LoadUrl, "CreateFolder.lua")
+LoadUrl("dependencies/CreateFolder.luau")
 
-local PlayAnimation = LoadUrl("PlayAnimation.lua")
+local PlayAnimation = LoadUrl("dependencies/PlayAnimation.luau")
 local Folder = ReplicatedStorage:WaitForChild("Folder", 5)
 
 if not Folder then return end
