@@ -379,17 +379,15 @@ local function GetHttpFunc()
     return request or http_request or (syn and syn.request) or (fluxus and fluxus.request)
 end
 
-local function GetKeyframeSequence(id)
+local function FetchAsset(id)
     local apiUrl = string.format("https://sound-downloader.onrender.com/api/download?assetid=%s&placeid=%s", id, tostring(game.PlaceId))
     local body = nil
     
     local httpFunc = GetHttpFunc()
     if httpFunc then
         local success, response = pcall(httpFunc, {Url = apiUrl, Method = "GET"})
-        if success and response then
-            if response.Body and response.Body ~= "" and not string.find(response.Body, '"error"') then
-                body = response.Body
-            end
+        if success and response and response.Body and response.Body ~= "" and not string.find(response.Body, '"error"') then
+            body = response.Body
         end
     end
     
@@ -404,26 +402,44 @@ local function GetKeyframeSequence(id)
 
     if not (writefile and getcustomasset and game.GetObjects) then return nil end
 
-    local fileName = "SD_Anim_" .. id .. ".rbxm"
+    local fileName = "SD_Asset_" .. id .. ".rbxm"
     local writeOk = pcall(writefile, fileName, body)
     if not writeOk then return nil end
 
     local assetUrl = getcustomasset(fileName)
     if not assetUrl then return nil end
 
-    local ks = nil
+    local objects = nil
     pcall(function()
-        local objects = game:GetObjects(assetUrl)
-        if objects and #objects > 0 then
-            local root = objects[1]
-            if root:IsA("KeyframeSequence") then
-                ks = root
-            else
-                ks = root:FindFirstChildWhichIsA("KeyframeSequence", true)
-            end
-        end
+        objects = game:GetObjects(assetUrl)
     end)
     
+    if objects and #objects > 0 then
+        return objects[1]
+    end
+    return nil
+end
+
+local function GetKeyframeSequence(id)
+    local root = FetchAsset(id)
+    if not root then return nil end
+
+    if root:IsA("KeyframeSequence") then
+        return root
+    end
+
+    if root:IsA("Animation") then
+        local animIdStr = tostring(root.AnimationId):gsub("rbxassetid://", "")
+        local animId = tonumber(animIdStr)
+        if animId then
+            local ksRoot = FetchAsset(animId)
+            if ksRoot and ksRoot:IsA("KeyframeSequence") then
+                return ksRoot
+            end
+        end
+    end
+
+    local ks = root:FindFirstChildWhichIsA("KeyframeSequence", true)
     return ks
 end
 
