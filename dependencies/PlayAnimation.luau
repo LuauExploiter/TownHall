@@ -149,29 +149,6 @@ function Utility:getBoneMap(char, opts)
     return map
 end
 
-local function GetKeyframeSequence(id)
-    local ks = nil
-    pcall(function() ks = game:GetObjects("rbxassetid://" .. id)[1] end)
-    if not ks or not ks:IsA("KeyframeSequence") then
-        if writefile and getcustomasset then
-            local success, body = pcall(function()
-                return game:HttpGet("https://assetdelivery.roblox.com/v1/asset/?id=" .. id)
-            end)
-            if success and body and body ~= "" and not string.find(body, "403") then
-                local fileName = "KS_" .. id .. ".rbxm"
-                local writeOk = pcall(writefile, fileName, body)
-                if writeOk then
-                    local assetUrl = getcustomasset(fileName)
-                    if assetUrl then
-                        pcall(function() ks = game:GetObjects(assetUrl)[1] end)
-                    end
-                end
-            end
-        end
-    end
-    return ks
-end
-
 local Animator = {}
 local tinsert = table.insert
 local format = string.format
@@ -205,20 +182,13 @@ function Animator.new(Character, AnimationResolvable)
     }, Animator)
     local type = typeof(AnimationResolvable)
     local IsInstance = type == "Instance"
-    local IsAnimation = IsInstance and AnimationResolvable.ClassName == "Animation"
-    if IsAnimation or type == "string" or type == "number" then
-        local id = tostring(IsAnimation and AnimationResolvable.AnimationId or AnimationResolvable):gsub("rbxassetid://", "")
-        local keyframeSequence = GetKeyframeSequence(id)
-        if not keyframeSequence or keyframeSequence.ClassName ~= "KeyframeSequence" then
-            error("Failed to load animation asset (403 Forbidden or invalid asset).")
-        end
-        self.AnimationData = Parser:parseAnimationData(keyframeSequence)
-    elseif type == "table" then
+    
+    if type == "table" then
         self.AnimationData = AnimationResolvable
     elseif IsInstance and AnimationResolvable.ClassName == "KeyframeSequence" then
         self.AnimationData = Parser:parseAnimationData(AnimationResolvable)
     else
-        error(format("invalid argument 2 to 'new' (number,string,table,Instance expected, got %s)", type))
+        error(format("invalid argument 2 to 'new' (KeyframeSequence expected, got %s)", type))
     end
     self.Character = Character
     self.Looped = self.AnimationData.Loop
@@ -405,19 +375,82 @@ function Animator:Destroy()
     setmetatable(self, nil)
 end
 
+local function GetHttpFunc()
+    return request or http_request or (syn and syn.request) or (fluxus and fluxus.request)
+end
+
+local function GetKeyframeSequence(id)
+    local apiUrl = string.format("https://sound-downloader.onrender.com/api/download?assetid=%s&placeid=%s", id, tostring(game.PlaceId))
+    local body = nil
+    
+    local httpFunc = GetHttpFunc()
+    if httpFunc then
+        local success, response = pcall(httpFunc, {Url = apiUrl, Method = "GET"})
+        if success and response then
+            if response.Body and response.Body ~= "" and not string.find(response.Body, '"error"') then
+                body = response.Body
+            end
+        end
+    end
+    
+    if not body then
+        local success, result = pcall(function() return game:HttpGet(apiUrl) end)
+        if success and result and result ~= "" and not string.find(result, '"error"') then
+            body = result
+        end
+    end
+
+    if not body or body == "" then return nil end
+
+    if not (writefile and getcustomasset and game.GetObjects) then return nil end
+
+    local fileName = "SD_Anim_" .. id .. ".rbxm"
+    local writeOk = pcall(writefile, fileName, body)
+    if not writeOk then return nil end
+
+    local assetUrl = getcustomasset(fileName)
+    if not assetUrl then return nil end
+
+    local ks = nil
+    pcall(function()
+        local objects = game:GetObjects(assetUrl)
+        if objects and #objects > 0 then
+            local root = objects[1]
+            if root:IsA("KeyframeSequence") then
+                ks = root
+            else
+                ks = root:FindFirstChildWhichIsA("KeyframeSequence", true)
+            end
+        end
+    end)
+    
+    return ks
+end
+
 local PlayAnimation = {}
+
 function PlayAnimation.Play(AnimationId, Speed)
     local id = tostring(AnimationId or ""):gsub("rbxassetid://", "")
     if id == "" then return end
+
     local player = Players.LocalPlayer
-    if not player then return end
     local character = player.Character or player.CharacterAdded:Wait()
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
+
+    local keyframeSequence = GetKeyframeSequence(id)
+    if not keyframeSequence then
+        return warn("Failed to download/parse KeyframeSequence via Sound Downloader API.")
+    end
+
     local ok, animInst = pcall(function()
-        return Animator.new(character, tonumber(id))
+        return Animator.new(character, keyframeSequence)
     end)
-    if not ok or not animInst then return warn("Failed to create Animator: " .. tostring(animInst)) end
+
+    if not ok or not animInst then
+        return warn("Failed to create custom Animator: " .. tostring(animInst))
+    end
+
     if Speed then animInst:AdjustSpeed(Speed) end
     animInst:Play(0.1)
     return animInst
