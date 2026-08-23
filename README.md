@@ -2,4 +2,4 @@
 
 - Loading the code
 Run this in your Roblox executor:
-```lua loadstring(game:HttpGet("https://github.com/LuauExploiter/TownHall/etcetc/end"))() ```
+```lua loadstring(game:HttpGet("https://raw.githubusercontent.com/LuauExploiter/TownHall/refs/heads/main/main.luau"))() ```
