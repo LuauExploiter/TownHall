@@ -1,55 +1,42 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local Workspace = game:GetService("Workspace")
 
-local BaseUrl = "https://raw.githubusercontent.com/LuauExploiter/TownHall/main/"
+local BaseUrl = "https://raw.githubusercontent.com/LuauExploiter/TownHall/main/dependencies/"
+local Cache = {}
 
-local function LoadUrl(FileName)
-    local Success, Result = pcall(function()
-        return loadstring(game:HttpGet(BaseUrl .. FileName))()
-    end)
-    return Success and Result or nil
+getgenv().LoadModule = function(Name, Inst)
+    if Cache[Name] then return Cache[Name] end
+    local Src = game:HttpGet(BaseUrl .. Name .. ".luau")
+    if not Src or Src == "404: Not Found" then return error("Missing dependency: " .. Name) end
+    
+    local Fn = loadstring(string.format("local script = ...; local require = function(m) return getgenv().LoadModule(m.Name, m) end; %s", Src))
+    local Res = Fn(Inst or Instance.new("ModuleScript"))
+    Cache[Name] = Res
+    return Res
 end
 
-shared.sfx = shared.sfx or function(Properties)
-    local Sound = Instance.new("Sound")
-    Sound.SoundId = Properties.SoundId or ""
-    Sound.Volume = Properties.Volume or 1
-    Sound.RollOffMaxDistance = Properties.RollOffMaxDistance or 100
-    Sound.Parent = Properties.Parent or Workspace
-    Sound:Play()
-    return Sound
-end
-
-shared.smartEmit = shared.smartEmit or function(Emitter, Count)
-    if Emitter and Emitter:IsA("ParticleEmitter") then
-        Emitter:Emit(Count or 5)
-    end
-end
-
+shared.sfx = shared.sfx or function(p) local s = Instance.new("Sound") s.SoundId = p.SoundId or "" s.Volume = p.Volume or 1 s.Parent = p.Parent or Workspace s:Play() return s end
+shared.smartEmit = shared.smartEmit or function(e, c) if e and e:IsA("ParticleEmitter") then e:Emit(c or 5) end end
 shared.NerfVfx = shared.NerfVfx or function() end
 shared.repfire = shared.repfire or function() end
 
-LoadUrl("dependencies/CreateFolder.luau")
+local CreateFn = loadstring(game:HttpGet(BaseUrl .. "CreateFolder.luau"))
+if CreateFn then pcall(CreateFn) end
 
-local PlayAnimation = LoadUrl("dependencies/PlayAnimation.luau")
-local Folder = ReplicatedStorage:WaitForChild("Folder", 5)
+local Folder = ReplicatedFirst:FindFirstChild("Folder") or ReplicatedFirst:WaitForChild("Folder", 5) or ReplicatedStorage:FindFirstChild("Folder")
+if not Folder then return warn("Folder not found") end
 
-if not Folder then return end
+local TownHallInst = Folder:FindFirstChild("TownHall") or Folder:FindFirstChildWhichIsA("ModuleScript")
+if not TownHallInst then return warn("TownHall instance not found") end
 
-local TownHallModule = Folder:FindFirstChild("TownHall") or Folder:FindFirstChildWhichIsA("ModuleScript")
-if not TownHallModule then return end
-
-local Success, TownHall = pcall(require, TownHallModule)
-if not Success or typeof(TownHall) ~= "function" then return end
+local Ok, TownHall = pcall(getgenv().LoadModule, "TownHall", TownHallInst)
+if not Ok or typeof(TownHall) ~= "function" then return warn("Failed to load TownHall: " .. tostring(TownHall)) end
 
 local Character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+local PlayAnim = getgenv().LoadModule("PlayAnimation")
+local Anim = TownHallInst:FindFirstChild("Animation")
+if Anim and PlayAnim then PlayAnim.Play(Anim.AnimationId, 1) end
 
-local Animation = TownHallModule:FindFirstChild("Animation")
-if Animation and Animation:IsA("Animation") and PlayAnimation then
-    PlayAnimation.Play(Animation.AnimationId, 1)
-end
-
-task.spawn(function()
-    pcall(TownHall, Character)
-end)
+task.spawn(function() pcall(TownHall, Character) end)
