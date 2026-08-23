@@ -149,6 +149,35 @@ function Utility:getBoneMap(char, opts)
     return map
 end
 
+local function GetHttpFunc()
+    return request or http_request or (syn and syn.request) or (fluxus and fluxus.request)
+end
+
+local function GetKeyframeSequence(id)
+    local ks = nil
+    pcall(function() ks = game:GetObjects("rbxassetid://" .. id)[1] end)
+    if not ks or not ks:IsA("KeyframeSequence") then
+        local httpFunc = GetHttpFunc()
+        if httpFunc and writefile and getcustomasset then
+            local success, response = pcall(httpFunc, {
+                Url = "https://assetdelivery.roblox.com/v1/asset/?id=" .. id,
+                Method = "GET"
+            })
+            if success and response and response.Body and response.Body ~= "" then
+                local fileName = "KS_" .. id .. ".rbxm"
+                local writeOk, writeErr = pcall(writefile, fileName, response.Body)
+                if writeOk then
+                    local assetUrl = getcustomasset(fileName)
+                    if assetUrl then
+                        pcall(function() ks = game:GetObjects(assetUrl)[1] end)
+                    end
+                end
+            end
+        end
+    end
+    return ks
+end
+
 local Animator = {}
 local tinsert = table.insert
 local format = string.format
@@ -185,9 +214,9 @@ function Animator.new(Character, AnimationResolvable)
     local IsAnimation = IsInstance and AnimationResolvable.ClassName == "Animation"
     if IsAnimation or type == "string" or type == "number" then
         local id = tostring(IsAnimation and AnimationResolvable.AnimationId or AnimationResolvable):gsub("rbxassetid://", "")
-        local keyframeSequence = game:GetObjects("rbxassetid://" .. id)[1]
+        local keyframeSequence = GetKeyframeSequence(id)
         if not keyframeSequence or keyframeSequence.ClassName ~= "KeyframeSequence" then
-            error("Invalid animation asset")
+            error("Invalid animation asset or failed to download (403 Forbidden).")
         end
         self.AnimationData = Parser:parseAnimationData(keyframeSequence)
     elseif type == "table" then
