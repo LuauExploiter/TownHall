@@ -1,5 +1,4 @@
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local Workspace = game:GetService("Workspace")
 
@@ -24,7 +23,7 @@ shared.repfire = shared.repfire or function() end
 local CreateFn = loadstring(game:HttpGet(BaseUrl .. "CreateFolder.luau"))
 if CreateFn then pcall(CreateFn) end
 
-local Folder = ReplicatedFirst:FindFirstChild("Folder") or ReplicatedFirst:WaitForChild("Folder", 5) or ReplicatedStorage:FindFirstChild("Folder")
+local Folder = ReplicatedFirst:FindFirstChild("Folder") or ReplicatedFirst:WaitForChild("Folder", 5)
 if not Folder then return end
 
 local TownHallInst = Folder:FindFirstChild("TownHall") or Folder:FindFirstChildWhichIsA("ModuleScript")
