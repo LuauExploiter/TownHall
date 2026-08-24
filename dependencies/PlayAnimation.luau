@@ -1,5 +1,20 @@
 local TweenService = game:GetService("TweenService")
 
+local function merge(t1, t2)
+    for k, v in pairs(t2) do
+        if type(v) == "table" then
+            if type(t1[k] or false) == "table" then
+                merge(t1[k] or {}, t2[k] or {})
+            else
+                t1[k] = v
+            end
+        else
+            t1[k] = v
+        end
+    end
+    return t1
+end
+
 local Signal = {}
 Signal.__index = Signal
 function Signal.new()
@@ -90,22 +105,47 @@ function Parser:parseAnimationData(kfs)
 end
 
 local Utility = {}
-function Utility:GetJointMap(char)
+function Utility:getMotorMap(char, opts)
     local map = {}
-    for _, obj in ipairs(char:GetDescendants()) do
-        if obj:IsA("Motor6D") then
-            local p1 = obj.Part1
-            if p1 then
-                local key = p1.Name
-                if not map[key] then map[key] = {} end
-                table.insert(map[key], obj)
+    local ignoreList = opts.IgnoreList or {}
+    local ignoreInList = opts.IgnoreInList or {}
+    local function isIgnored(inst)
+        for _, v in ipairs(ignoreList) do if v == inst then return true end end
+        for _, v in ipairs(ignoreInList) do if v == inst then return true end end
+        return false
+    end
+    local function recurse(parent)
+        for _, child in ipairs(parent:GetChildren()) do
+            if child:IsA("Motor6D") and not isIgnored(child) then
+                local p0 = child.Part0
+                local p1 = child.Part1
+                if p0 and p1 then
+                    local key = p0.Name
+                    if not map[key] then map[key] = {} end
+                    if not map[key][p1.Name] then map[key][p1.Name] = {} end
+                    table.insert(map[key][p1.Name], child)
+                end
             end
-        elseif obj:IsA("Bone") then
-            local key = obj.Name
-            if not map[key] then map[key] = {} end
-            table.insert(map[key], obj)
+            recurse(child)
         end
     end
+    recurse(char)
+    return map
+end
+function Utility:getBoneMap(char, opts)
+    local map = {}
+    local function recurse(parent)
+        for _, child in ipairs(parent:GetChildren()) do
+            if child:IsA("Bone") then
+                local parentName = child.Parent.Name
+                if not map[parentName] then map[parentName] = {} end
+                if not map[parentName][child.Name] then map[parentName][child.Name] = {} end
+                table.insert(map[parentName][child.Name], child)
+            end
+            recurse(child)
+        end
+    end
+    recurse(char)
     return map
 end
 
@@ -146,6 +186,10 @@ function Animator.new(Character, KeyframeSequence)
     end
     local self = setmetatable({
         AnimationData = {},
+        BoneIgnoreInList = {},
+        MotorIgnoreInList = {},
+        BoneIgnoreList = {},
+        MotorIgnoreList = {},
         handleVanillaAnimator = true,
         Character = nil,
         Looped = false,
@@ -161,7 +205,6 @@ function Animator.new(Character, KeyframeSequence)
     
     self.AnimationData = Parser:parseAnimationData(KeyframeSequence)
     self.Character = Character
-    self.JointMap = Utility:GetJointMap(Character)
     self.Looped = self.AnimationData.Loop
     self.Length = self.AnimationData.Frames[#self.AnimationData.Frames].Time
     self._maid = Maid.new()
@@ -174,25 +217,56 @@ function Animator.new(Character, KeyframeSequence)
     return self
 end
 
-function Animator:_playPose(pose, fade)
-    if not pose then return end
-    local joints = self.JointMap[pose.Name]
-    if joints then
-        local style = GetEasingStyle(pose.EasingStyle)
-        local dir = GetEasingDirection(pose.EasingDirection)
-        local TI = TweenInfo.new(fade, style, dir)
-        local Target = {Transform = pose.CFrame}
-        for _, joint in ipairs(joints) do
-            if fade > 0 then
-                TweenService:Create(joint, TI, Target):Play()
-            else
-                joint.Transform = pose.CFrame
-            end
+function Animator:IgnoreMotor(inst)
+    if typeof(inst) == "Instance" and inst.ClassName == "Motor6D" then
+        tinsert(self.MotorIgnoreList, inst)
+    end
+end
+function Animator:IgnoreBone(inst)
+    if typeof(inst) == "Instance" and inst.ClassName == "Bone" then
+        tinsert(self.BoneIgnoreList, inst)
+    end
+end
+function Animator:IgnoreMotorIn(inst)
+    if typeof(inst) == "Instance" then tinsert(self.MotorIgnoreInList, inst) end
+end
+function Animator:IgnoreBoneIn(inst)
+    if typeof(inst) == "Instance" then tinsert(self.BoneIgnoreInList, inst) end
+end
+
+function Animator:_playPose(pose, parent, fade)
+    if pose.Subpose then
+        for count = 1, #pose.Subpose do
+            self:_playPose(pose.Subpose[count], pose, fade)
         end
     end
-    if pose.Subpose then
-        for _, subpose in ipairs(pose.Subpose) do
-            self:_playPose(subpose, fade)
+    if not parent then return end
+    local MotorMap = Utility:getMotorMap(self.Character, {IgnoreIn = self.MotorIgnoreInList, IgnoreList = self.MotorIgnoreList})
+    local BoneMap = Utility:getBoneMap(self.Character, {IgnoreIn = self.BoneIgnoreInList, IgnoreList = self.BoneIgnoreList})
+    
+    local TweenEasingStyle = GetEasingStyle(pose.EasingStyle)
+    local TweenEasingDir = GetEasingDirection(pose.EasingDirection)
+    
+    local TI = TweenInfo.new(fade, TweenEasingStyle, TweenEasingDir)
+    local Target = {Transform = pose.CFrame}
+    local M = MotorMap[parent.Name]
+    local B = BoneMap[parent.Name]
+    local C = {}
+    if M then
+        local MM = M[pose.Name] or {}
+        C = merge(C, MM)
+    end
+    if B then
+        local BB = B[pose.Name] or {}
+        C = merge(C, BB)
+    end
+    for count = 1, #C do
+        local obj = C[count]
+        if self == nil or self._stopped then break end
+        if fade > 0 then
+            TweenService:Create(obj, TI, Target):Play()
+        else
+            obj.Transform = pose.CFrame
         end
     end
 end
@@ -257,7 +331,7 @@ function Animator:Play(fadeTime, weight, speed)
                     if i ~= 1 then
                         ft = (t * (speed or self.Speed) - self.AnimationData.Frames[i - 1].Time) / (speed or self.Speed)
                     end
-                    self:_playPose(p, ft)
+                    self:_playPose(p, nil, ft)
                 end
             end
             if t > clock() - start then
