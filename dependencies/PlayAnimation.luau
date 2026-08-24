@@ -196,7 +196,7 @@ function Animator.new(Character, KeyframeSequence)
         Length = 0,
         Speed = 1,
         IsPlaying = false,
-        _stopFadeTime = 0.1,
+        _stopFadeTime = 0.3,
         _playing = false,
         _stopped = false,
         _isLooping = false,
@@ -275,10 +275,12 @@ function Animator:FadeOut(fadeTime)
     if self._fadedOut then return end
     self._fadedOut = true
 
-    local TI = TweenInfo.new(fadeTime, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+    local TI = TweenInfo.new(fadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
     for _, obj in ipairs(self.Character:GetDescendants()) do
         if obj:IsA("Motor6D") or obj:IsA("Bone") then
-            TweenService:Create(obj, TI, {Transform = CFrame.new()}):Play()
+            if obj.Transform ~= CFrame.new() then
+                TweenService:Create(obj, TI, {Transform = CFrame.new()}):Play()
+            end
         end
     end
     
@@ -364,7 +366,7 @@ function Animator:Play(fadeTime, weight, speed)
             return self:Play(fadeTime, weight, speed)
         end
         
-        self:FadeOut(self._stopFadeTime > 0 and self._stopFadeTime or 0.2)
+        self:FadeOut(self._stopFadeTime > 0 and self._stopFadeTime or 0.3)
         
         if self.Character and self.handleVanillaAnimator then
             local Humanoid = self.Character:FindFirstChild("Humanoid")
@@ -402,7 +404,7 @@ end
 
 function Animator:AdjustSpeed(speed) self.Speed = speed end
 function Animator:Stop(fadeTime)
-    self._stopFadeTime = fadeTime or 0.2
+    self._stopFadeTime = fadeTime or 0.3
     self._stopped = true
 end
 function Animator:Destroy()
