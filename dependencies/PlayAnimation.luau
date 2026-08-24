@@ -148,6 +148,25 @@ function Utility:getBoneMap(char, opts)
     return map
 end
 
+local function GetEasingStyle(style)
+    if typeof(style) == "EnumItem" then
+        local name = style.Name
+        if name == "Constant" then return Enum.EasingStyle.Linear end
+        if name == "Quadratic" then return Enum.EasingStyle.Quad end
+        local enum = Enum.EasingStyle[name]
+        if enum then return enum end
+    end
+    return Enum.EasingStyle.Linear
+end
+
+local function GetEasingDirection(dir)
+    if typeof(dir) == "EnumItem" then
+        local enum = Enum.EasingDirection[dir.Name]
+        if enum then return enum end
+    end
+    return Enum.EasingDirection.In
+end
+
 local Animator = {}
 local tinsert = table.insert
 local format = string.format
@@ -224,11 +243,8 @@ function Animator:_playPose(pose, parent, fade)
     local MotorMap = Utility:getMotorMap(self.Character, {IgnoreIn = self.MotorIgnoreInList, IgnoreList = self.MotorIgnoreList})
     local BoneMap = Utility:getBoneMap(self.Character, {IgnoreIn = self.BoneIgnoreInList, IgnoreList = self.BoneIgnoreList})
     
-    -- Convert PoseEasingStyle to EasingStyle for TweenInfo
-    local EasingStyleName = pose.EasingStyle and pose.EasingStyle.Name or "Linear"
-    local EasingDirName = pose.EasingDirection and pose.EasingDirection.Name or "In"
-    local TweenEasingStyle = Enum.EasingStyle[EasingStyleName] or Enum.EasingStyle.Linear
-    local TweenEasingDir = Enum.EasingDirection[EasingDirName] or Enum.EasingDirection.In
+    local TweenEasingStyle = GetEasingStyle(pose.EasingStyle)
+    local TweenEasingDir = GetEasingDirection(pose.EasingDirection)
     
     local TI = TweenInfo.new(fade, TweenEasingStyle, TweenEasingDir)
     local Target = {Transform = pose.CFrame}
