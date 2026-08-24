@@ -271,6 +271,20 @@ function Animator:_playPose(pose, parent, fade)
     end
 end
 
+function Animator:FadeOut(fadeTime)
+    if self._fadedOut then return end
+    self._fadedOut = true
+
+    local TI = TweenInfo.new(fadeTime, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+    for _, obj in ipairs(self.Character:GetDescendants()) do
+        if obj:IsA("Motor6D") or obj:IsA("Bone") then
+            TweenService:Create(obj, TI, {Transform = CFrame.new()}):Play()
+        end
+    end
+    
+    task.wait(fadeTime)
+end
+
 function Animator:Play(fadeTime, weight, speed)
     fadeTime = fadeTime or 0.1
     if not self.Character or self.Character.Parent == nil or (self._playing and not self._isLooping) then return end
@@ -340,26 +354,17 @@ function Animator:Play(fadeTime, weight, speed)
                 until self._stopped or clock() - start >= t
             end
         end
+        
         if deathConnection then deathConnection:Disconnect() deathConnection = nil end
         if noParentConnection then noParentConnection:Disconnect() noParentConnection = nil end
+        
         if self.Looped and not self._stopped then
             self.DidLoop:Fire()
             self._isLooping = true
             return self:Play(fadeTime, weight, speed)
         end
         
-        -- Smooth Fade Out
-        local fadeOutTime = 0.2
-        if self._stopFadeTime > 0 then
-            fadeOutTime = self._stopFadeTime
-        end
-        local fadeOutInfo = TweenInfo.new(fadeOutTime, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        for _, obj in ipairs(self.Character:GetDescendants()) do
-            if obj:IsA("Motor6D") or obj:IsA("Bone") then
-                TweenService:Create(obj, fadeOutInfo, {Transform = CFrame.new()}):Play()
-            end
-        end
-        task.wait(fadeOutTime)
+        self:FadeOut(self._stopFadeTime > 0 and self._stopFadeTime or 0.2)
         
         if self.Character and self.handleVanillaAnimator then
             local Humanoid = self.Character:FindFirstChild("Humanoid")
@@ -396,7 +401,10 @@ function Animator:GetMarkerReachedSignal(name)
 end
 
 function Animator:AdjustSpeed(speed) self.Speed = speed end
-function Animator:Stop(fadeTime) self._stopFadeTime = fadeTime or 0.1 self._stopped = true end
+function Animator:Stop(fadeTime)
+    self._stopFadeTime = fadeTime or 0.2
+    self._stopped = true
+end
 function Animator:Destroy()
     if not self._stopped then
         self:Stop(0)
