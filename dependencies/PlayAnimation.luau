@@ -347,7 +347,20 @@ function Animator:Play(fadeTime, weight, speed)
             self._isLooping = true
             return self:Play(fadeTime, weight, speed)
         end
-        wait()
+        
+        -- Smooth Fade Out
+        local fadeOutTime = 0.2
+        if self._stopFadeTime > 0 then
+            fadeOutTime = self._stopFadeTime
+        end
+        local fadeOutInfo = TweenInfo.new(fadeOutTime, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        for _, obj in ipairs(self.Character:GetDescendants()) do
+            if obj:IsA("Motor6D") or obj:IsA("Bone") then
+                TweenService:Create(obj, fadeOutInfo, {Transform = CFrame.new()}):Play()
+            end
+        end
+        task.wait(fadeOutTime)
+        
         if self.Character and self.handleVanillaAnimator then
             local Humanoid = self.Character:FindFirstChild("Humanoid")
             if Humanoid and not Humanoid:FindFirstChildOfClass("Animator") then
