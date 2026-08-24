@@ -1,4 +1,3 @@
-local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 
 local function merge(t1, t2)
@@ -158,9 +157,12 @@ local clock = os.clock
 Animator.__index = Animator
 Animator.ClassName = "Animator"
 
-function Animator.new(Character, AnimationResolvable)
+function Animator.new(Character, KeyframeSequence)
     if typeof(Character) ~= "Instance" then
         error(format("invalid argument 1 to 'new' (Instance expected, got %s)", typeof(Character)))
+    end
+    if typeof(KeyframeSequence) ~= "Instance" or KeyframeSequence.ClassName ~= "KeyframeSequence" then
+        error(format("invalid argument 2 to 'new' (KeyframeSequence expected, got %s)", typeof(KeyframeSequence)))
     end
     local self = setmetatable({
         AnimationData = {},
@@ -180,16 +182,8 @@ function Animator.new(Character, AnimationResolvable)
         _isLooping = false,
         _markerSignal = {},
     }, Animator)
-    local type = typeof(AnimationResolvable)
-    local IsInstance = type == "Instance"
     
-    if type == "table" then
-        self.AnimationData = AnimationResolvable
-    elseif IsInstance and AnimationResolvable.ClassName == "KeyframeSequence" then
-        self.AnimationData = Parser:parseAnimationData(AnimationResolvable)
-    else
-        error(format("invalid argument 2 to 'new' (KeyframeSequence expected, got %s)", type))
-    end
+    self.AnimationData = Parser:parseAnimationData(KeyframeSequence)
     self.Character = Character
     self.Looped = self.AnimationData.Loop
     self.Length = self.AnimationData.Frames[#self.AnimationData.Frames].Time
@@ -375,98 +369,14 @@ function Animator:Destroy()
     setmetatable(self, nil)
 end
 
-local function GetHttpFunc()
-    return request or http_request or (syn and syn.request) or (fluxus and fluxus.request)
-end
-
-local function FetchAsset(id)
-    local apiUrl = string.format("https://sound-downloader.onrender.com/api/download?assetid=%s&placeid=%s", id, tostring(game.PlaceId))
-    local body = nil
-    
-    local httpFunc = GetHttpFunc()
-    if httpFunc then
-        local success, response = pcall(httpFunc, {Url = apiUrl, Method = "GET"})
-        if success and response and response.Body and response.Body ~= "" and not string.find(response.Body, '"error"') then
-            body = response.Body
-        end
-    end
-    
-    if not body then
-        local success, result = pcall(function() return game:HttpGet(apiUrl) end)
-        if success and result and result ~= "" and not string.find(result, '"error"') then
-            body = result
-        end
-    end
-
-    if not body or body == "" then return nil end
-
-    if not (writefile and getcustomasset and game.GetObjects) then return nil end
-
-    local fileName = "SD_Asset_" .. id .. ".rbxm"
-    local writeOk = pcall(writefile, fileName, body)
-    if not writeOk then return nil end
-
-    local assetUrl = getcustomasset(fileName)
-    if not assetUrl then return nil end
-
-    local objects = nil
-    pcall(function()
-        objects = game:GetObjects(assetUrl)
-    end)
-    
-    if objects and #objects > 0 then
-        return objects[1]
-    end
-    return nil
-end
-
-local function GetKeyframeSequence(id)
-    local root = FetchAsset(id)
-    if not root then return nil end
-
-    if root:IsA("KeyframeSequence") then
-        return root
-    end
-
-    if root:IsA("Animation") then
-        local animIdStr = tostring(root.AnimationId):gsub("rbxassetid://", "")
-        local animId = tonumber(animIdStr)
-        if animId then
-            local ksRoot = FetchAsset(animId)
-            if ksRoot and ksRoot:IsA("KeyframeSequence") then
-                return ksRoot
-            end
-        end
-    end
-
-    local ks = root:FindFirstChildWhichIsA("KeyframeSequence", true)
-    return ks
-end
-
 local PlayAnimation = {}
 
-function PlayAnimation.Play(AnimationId, Speed)
-    local id = tostring(AnimationId or ""):gsub("rbxassetid://", "")
-    if id == "" then return end
-
-    local player = Players.LocalPlayer
-    local character = player.Character or player.CharacterAdded:Wait()
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-
-    local keyframeSequence = GetKeyframeSequence(id)
-    if not keyframeSequence then
-        return warn("Failed to download/parse KeyframeSequence via Sound Downloader API.")
-    end
-
+function PlayAnimation.Play(Character, KeyframeSequence, Speed)
+    if typeof(Character) ~= "Instance" or typeof(KeyframeSequence) ~= "Instance" then return nil end
     local ok, animInst = pcall(function()
-        return Animator.new(character, keyframeSequence)
+        return Animator.new(Character, KeyframeSequence)
     end)
-
-    if not ok or not animInst then
-        return warn("Failed to create custom Animator: " .. tostring(animInst))
-    end
-
+    if not ok or not animInst then return nil end
     if Speed then animInst:AdjustSpeed(Speed) end
     animInst:Play(0.1)
     return animInst
