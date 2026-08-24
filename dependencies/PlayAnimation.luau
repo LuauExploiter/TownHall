@@ -223,7 +223,14 @@ function Animator:_playPose(pose, parent, fade)
     if not parent then return end
     local MotorMap = Utility:getMotorMap(self.Character, {IgnoreIn = self.MotorIgnoreInList, IgnoreList = self.MotorIgnoreList})
     local BoneMap = Utility:getBoneMap(self.Character, {IgnoreIn = self.BoneIgnoreInList, IgnoreList = self.BoneIgnoreList})
-    local TI = TweenInfo.new(fade, pose.EasingStyle, pose.EasingDirection)
+    
+    -- Convert PoseEasingStyle to EasingStyle for TweenInfo
+    local EasingStyleName = pose.EasingStyle and pose.EasingStyle.Name or "Linear"
+    local EasingDirName = pose.EasingDirection and pose.EasingDirection.Name or "In"
+    local TweenEasingStyle = Enum.EasingStyle[EasingStyleName] or Enum.EasingStyle.Linear
+    local TweenEasingDir = Enum.EasingDirection[EasingDirName] or Enum.EasingDirection.In
+    
+    local TI = TweenInfo.new(fade, TweenEasingStyle, TweenEasingDir)
     local Target = {Transform = pose.CFrame}
     local M = MotorMap[parent.Name]
     local B = BoneMap[parent.Name]
